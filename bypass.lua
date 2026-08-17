@@ -2,75 +2,37 @@
 local a = game:GetService("TeleportService")
 local b = game:GetService("Players").LocalPlayer
 
--- Daftar metode TeleportService + Player yang wajib diblokir
 local c = {
-    "Teleport", 
-    "TeleportToPlaceInstance", 
-    "TeleportAsync", 
-    "TeleportToOptions", 
-    "TeleportToGroupPlayer", 
-    "TeleportPartyAsync", 
-    "TeleportToPrivateServer",
-    "ReserveServerAsync",
-    "GetPlayerPlaceInstanceAsync",
-    "Kick",
-    "RequestLeaveSession"
+    "Teleport", "TeleportToPlaceInstance", "TeleportAsync", 
+    "TeleportToOptions", "TeleportToGroupPlayer", "TeleportPartyAsync", 
+    "TeleportToPrivateServer", "ReserveServerAsync", "GetPlayerPlaceInstanceAsync",
+    "Kick", "RequestLeaveSession"
 }
 
--- 1. Lapisan Proteksi __namecall
-local d;
-d = hookmetamethod(game, "__namecall", function(e, ...)
-    local f = getnamecallmethod()
-    
-    -- Blokir jika metode di dalam daftar dipanggil via objek TeleportService atau Player
-    if (e == a or e == b) and table.find(c, f) then 
-        warn("[BLOCKER] Preventing call via __namecall: " .. tostring(f))
-        return nil 
-    end
-    
-    -- Cegat jika game mencoba membuat objek TeleportOptions baru via Instance.new
-    if f == "New" or f == "new" then
-        local args = {...}
-        if args[1] == "TeleportOptions" then
-            warn("[BLOCKER] Preventing creation of TeleportOptions")
-            return nil
-        end
-    end
-    
-    return d(e, ...)
-end)
-
--- 2. Lapisan Proteksi __index (Jika game mengambil fungsi sebagai variabel)
-local oldIndex;
-oldIndex = hookmetamethod(game, "__index", function(t, k)
-    if (t == a or t == b) and table.find(c, k) then 
-        warn("[BLOCKER] Preventing access to method: " .. tostring(k))
-        return function() return nil end 
-    end
-    return oldIndex(t, k)
-end)
-
--- 3. Lapisan Proteksi Direct Hook (Memperbaiki bug perulangan 'b,b')
-if hookfunction then
-    for _, methodName in ipairs(c) do 
-        -- Cek apakah metode tersebut ada di TeleportService
-        if a[methodName] then
+-- Mengunci fungsi di memori secara konstan menggunakan loop cepat
+task.spawn(function()
+    while true do
+        for _, methodName in ipairs(c) do
             pcall(function()
-                hookfunction(a[methodName], function(...)
-                    warn("[BLOCKER] Preventing Direct Hook (TeleportService): " .. methodName)
-                    return nil
-                end)
-            end)
-        -- Cek apakah metode tersebut ada di objek Player
-        elseif b[methodName] then
-            pcall(function()
-                hookfunction(b[methodName], function(...)
-                    warn("[BLOCKER] Preventing Direct Hook (Player): " .. methodName)
-                    return nil
-                end)
+                -- Paksa timpa fungsi asli di TeleportService
+                if a[methodName] then
+                    a[methodName] = function() 
+                        warn("[LOOP-BLOCK] Blocked: " .. methodName)
+                        return nil 
+                    end
+                end
+                -- Paksa timpa fungsi asli di objek Player
+                if b[methodName] then
+                    b[methodName] = function() 
+                        warn("[LOOP-BLOCK] Blocked: " .. methodName)
+                        return nil 
+                    end
+                end
             end)
         end
+        -- Jeda sangat kecil (1 tick engine) agar executor Delta tidak crash/freeze
+        task.wait() 
     end
-end
+end)
 
-print("[Info] Anti Teleport & Anti Kick v2 Active!")
+print("[Info] Loop Blocker Active!")
